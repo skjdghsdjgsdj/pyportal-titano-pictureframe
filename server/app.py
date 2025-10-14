@@ -3,54 +3,60 @@ import hashlib
 import io
 import os
 import re
-from typing import Iterable
+from typing import Iterable, Any
 
 import PIL
 import dotenv
 import requests
 from PIL import Image, ImageOps
-from flask import Flask, request, jsonify, make_response
-from marshmallow import Schema, fields, validate
+from flask import Flask, jsonify, make_response
 
 app = Flask(__name__)
-
-class SyncStateSchema(Schema):
-	assets = fields.Dict(keys=fields.UUID(), values=fields.String(validate = validate.Regexp('^[0-9a-f]{32}$')))
 
 class Immich:
 	def __init__(self, base_url: str, api_key: str):
 		self.api_key = api_key
 		self.base_url = base_url
 
-	def get_assets_to_download(self, already_have_assets: dict[str, str]) -> Iterable[str]:
+	def _do_search(self, page: Any | None = None) -> dict:
+		payload = {
+			"isFavorite": True,
+			"isMotion": False,
+			"isOffline": False,
+			"type": "IMAGE"
+		}
+
+		if page is not None:
+			payload["page"] = page
+
 		response = requests.post(
-			url = self.base_url + "/api/search/random",
+			url = self.base_url + "/api/search/metadata",
 			headers = {
 				"x-api-key": self.api_key
 			},
-			json = {
-				"isFavorite": True,
-				"isMotion": False,
-				"isOffline": False,
-				"type": "IMAGE",
-				"visibility": "timeline"
-			}
+			json = payload
 		)
 		response.raise_for_status()
 
-		for row in response.json():
-			uuid = row["id"]
-			checksum = row["checksum"]
+		return response.json()
 
-			if uuid not in already_have_assets:
-				yield uuid # entirely new UUID
-			else:
-				have_checksum = already_have_assets[uuid]
-				current_checksum = hashlib.md5(base64.b64decode(checksum)).hexdigest()
+	def get_assets(self) -> Iterable[tuple[str, str]]:
+		page = None
+		while True:
+			response = self._do_search(page)
 
-				if have_checksum != current_checksum:
-					# asset changed
-					yield uuid
+			for asset in response["assets"]["items"]:
+				if asset["visibility"] != "archive" and asset["visibility"] != "timeline":
+					continue # to skip locked/hidden or future unknown visibility types to be safe
+
+				uuid = asset["id"]
+				md5 = hashlib.md5(base64.b64decode(asset["checksum"])).hexdigest()
+
+				yield uuid, md5
+
+			page = response["assets"]["nextPage"]
+			if page is None:
+				break # stop once Immich's pagination says nothing is left
 
 	def get_image(self, uuid: str) -> PIL.Image.Image:
 		response = requests.get(
@@ -73,16 +79,13 @@ immich = Immich(
 	api_key = os.getenv("IMMICH_API_KEY")
 )
 
-@app.route('/sync', methods=['POST'])
-def get_image_candidates():
-	json = request.get_json()
-	errors = SyncStateSchema().validate(json)
+@app.route('/assets', methods=['GET'])
+def get_available_images():
+	to_download = {}
+	for uuid, md5 in immich.get_assets():
+		to_download[uuid] = md5
 
-	if errors:
-		return jsonify(errors), 400
-
-	uuids = list(immich.get_assets_to_download(json["assets"]))
-	return jsonify(uuids), 200
+	return jsonify(to_download), 200
 
 @app.route('/image/<immichUUID>', methods=['GET'])
 def get_image(immichUUID: str):
@@ -90,7 +93,7 @@ def get_image(immichUUID: str):
 		return jsonify({"error": "Not a valid UUID"}), 400
 
 	image = immich.get_image(immichUUID)
-	resized = ImageOps.pad(image, (320, 240))
+	resized = ImageOps.pad(image, (os.getenv("IMAGE_WIDTH", 480), os.getenv("IMAGE_HEIGHT", 320)))
 
 	buffer = io.BytesIO()
 	resized.save(buffer, format="JPEG", quality=90)

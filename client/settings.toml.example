@@ -1,0 +1,10 @@
+# Your Wifi network's name
+CIRCUITPY_WIFI_SSID="..."
+# Your Wifi network's password
+CIRCUITPY_WIFI_PASSWORD="..."
+# URL to the Flask server, including HTTP(S) and port number, without trailing slash
+ENDPOINT_URL="http://1.2.3.4:5000"
+# Ensure at least this much space is free on the SD card when downloading images (default of 1048576 is 1 MB). If less
+# than this much space exists, unused downloaded assets are deleted in an undefined order until enough space does exist.
+# Set to 0 to disable free space checks, but not a good idea.
+MIN_FREE_BYTES=1048576
