@@ -12,7 +12,7 @@ Standoff_height = 4;
 
 $fn = ($preview ? 36 : 72);
 
-if ($preview) {
+if (false && $preview) {
 	color("#339933")
 	translate([0.8, -27.7, -4.5])
 	rotate([-90, 0, 0])
@@ -177,7 +177,7 @@ module backplate() {
 }
 
 module stand() {
-	size = 2.95;
+	size = 3.1;
 	inset = 5;
 
 	stand_depth = total_depth() - total_depth() / 4;
@@ -201,5 +201,5 @@ module stand() {
 }
 
 //color("#ffffee") case();
-color("#eeeeff") backplate();
-//color("#ffeeff") stand();
+//color("#eeeeff") backplate();
+color("#ffeeff") stand();
