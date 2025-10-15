@@ -62,7 +62,7 @@ With the server done, you can move into the rest of the assembly.
     7. If you want to use the ambient light sensor, shove a little piece of 1.75mm transparent filament (any material) into the hole near the microSD card until it's flush with the outside of the case. If you don't care about having the screen adjust its brightness automatically, or you odn't have any transparent filament, you can skip this.
 4. Install the software for the picture frame:
     1. Clone this Git repository, or download it as a `.zip` and extract it.
-    2. Copy `client/settings.toml.example` to `settings.toml` and open it in a text editor.
+    2. Copy `client/settings.toml.example` to `client/settings.toml` and open it in a text editor.
     3. At a minimum, look at the section "Settings you'll have to change" and change those values. There are more settings you can change if you want, but it's not necessary.
     4. Copy everything in the `client` directory, but not the `client` directory itself, to the `CIRCUITPY` drive. It might take a while. Eventually the board should reboot, connect to Wi-Fi, and start showing your pictures!
 
@@ -84,7 +84,7 @@ The overall workflow of the picture frame is:
     3. A list of assets to download is assembled: this is every UUID in the JSON map that's not on the SD card or ones with differing MD5 hashes.
     4. Each asset (if any) is downloaded as a `.bmp` from the `/asset/<uuid>` endpoint in the Flask server. Before each individual download, disk space is freed if necessary. More specifically, the asset is downloaded by the Flask server's `/asset/<uuid>` endpoint which in turn gets it from Immich's `/api/assets/<uuid>/thumbnail` endpoint, resized to 480x320 with letterboxing/pillarboxing added as necessary to ensure the image is exactly that size, then streamed back as an uncompressed 24-bit `image/bmp`.
 
-Assets are stored in `/sd/<uuid>/<md5>.bmp`. Bitmaps are used instead of JPEGs because `displayio.OnDiskBitmap` is needed to directly stream the bitmap data from the SD card to the screen. The JPEGs are too big to decode and buffer into the tiny amount of memory available. This is also one of the key reasons the Flask server exists: the images in Immich are way, way too big to manipulate directly on the board, but trivial for Python's Pillow library to do so on a real server.
+Assets are stored in `/sd/assets/<uuid>/<md5>.bmp`. Bitmaps are used instead of JPEGs because `displayio.OnDiskBitmap` is needed to directly stream the bitmap data from the SD card to the screen. The JPEGs are too big to decode and buffer into the tiny amount of memory available. This is also one of the key reasons the Flask server exists: the images in Immich are way, way too big to manipulate directly on the board, but trivial for Python's Pillow library to do so on a real server.
 
 There is no persistent index of images on the card. Instead, the filesystem is iterated to find candidate files and a random one picked. This, presumably, will be slow if there are a lot of images. The code won't randomly show the same image twice in a row unless there's only one image available.
 
