@@ -94,9 +94,10 @@ def get_image(immichUUID: str):
 
 	image = immich.get_image(immichUUID)
 	resized = ImageOps.pad(image, (os.getenv("IMAGE_WIDTH", 480), os.getenv("IMAGE_HEIGHT", 320)))
+	output_image = resized.convert(mode = "P", colors = 256, dither = Image.Dither.FLOYDSTEINBERG)
 
 	buffer = io.BytesIO()
-	resized.save(buffer, format="BMP")
+	output_image.save(buffer, format="BMP")
 	buffer.seek(0)
 
 	response = make_response(buffer)
