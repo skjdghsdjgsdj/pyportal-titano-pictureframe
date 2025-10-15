@@ -14,11 +14,33 @@ from flask import Flask, jsonify, make_response
 app = Flask(__name__)
 
 class Immich:
+	"""
+	API wrapper for Immich.
+	"""
+
 	def __init__(self, base_url: str, api_key: str):
+		"""
+		:param base_url: Base URL to the Immich instance; no trailing slash or /api.
+		:param api_key: API key to use for authorization
+		"""
+
 		self.api_key = api_key
 		self.base_url = base_url
 
 	def _do_search(self, page: Any | None = None) -> dict:
+		"""
+		Executes a single search (i.e., does not handle the pagination). For an asset to be included, it must:
+
+		* Be a favorite
+		* Not be a motion picture
+		* Not be offline
+		* Have a type of "IMAGE"
+
+		:param page: Page number as provided by Immich; none for the initial request, or whatever Immich said for
+		following requests
+		:return: Raw response from Immich's /api/search/metadata endpoint
+		"""
+
 		payload = {
 			"isFavorite": True,
 			"isMotion": False,
@@ -41,6 +63,12 @@ class Immich:
 		return response.json()
 
 	def get_assets(self) -> Iterable[tuple[str, str]]:
+		"""
+		Gets asset UUIDs and MD5 hashes of their checksums from Immich that can be displayed on the photo frame.
+
+		:return: Map of asset UUIDs and MD5 hashes of their checksums
+		"""
+
 		page = None
 		while True:
 			response = self._do_search(page)
@@ -59,6 +87,13 @@ class Immich:
 				break # stop once Immich's pagination says nothing is left
 
 	def get_image(self, uuid: str) -> PIL.Image.Image:
+		"""
+		Gets an image from Immich's API as defined by its "thumbnail" URL.
+
+		:param uuid: UUID of the image
+		:return: Pillow image with the thumbnail loaded in it
+		"""
+
 		response = requests.get(
 			url = f"{self.base_url}/api/assets/{uuid}/thumbnail",
 			params = {
@@ -81,6 +116,12 @@ immich = Immich(
 
 @app.route('/assets', methods=['GET'])
 def get_available_images():
+	"""
+	Lists all assets in Immich that can be downloaded by the photo frame.
+
+	:return: A map of asset UUIDs to MD5 hashes of their checksums.
+	"""
+
 	to_download = {}
 	for uuid, md5 in immich.get_assets():
 		to_download[uuid] = md5
@@ -89,6 +130,16 @@ def get_available_images():
 
 @app.route('/image/<immichUUID>', methods=['GET'])
 def get_image(immichUUID: str):
+	"""
+	Downloads an image from Immich, converts it to a BMP, and serves it. The bitmap is put in a container of a
+	fixed size (by default 480x320; change it with the IMAGE_WIDTH and IMAGE_HEIGHT environment variables) and resized
+	to fit with letterboxing or pillarboxing as needed.
+
+	:param immichUUID: UUID of the asset in Immich. Technically any kind of asset is supported so long as it can
+	produce a thumbnail, but in practice, this should always be an image.
+	:return: A paletted 256-color (8-bit RGB) indexed bitmap of the asset
+	"""
+
 	if not re.match("^[a-f0-9]{8}-?[a-f0-9]{4}-?4[a-f0-9]{3}-?[89ab][a-f0-9]{3}-?[a-f0-9]{12}$", immichUUID):
 		return jsonify({"error": "Not a valid UUID"}), 400
 
@@ -107,6 +158,12 @@ def get_image(immichUUID: str):
 
 @app.route("/health-check", methods=["GET"])
 def health_check():
+	"""
+	Basic health check.
+
+	:return: No body and HTTP 204
+	"""
+
 	return "", 200
 
 if __name__ == '__main__':
