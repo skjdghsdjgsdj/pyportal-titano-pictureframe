@@ -47,24 +47,24 @@ With the server done, you can move into the rest of the assembly.
 
 1. [Install CircuitPython 10 on the board](https://learn.adafruit.com/adafruit-pyportal-titano/circuitpython#set-up-circuitpython-quick-start-3050161).
 2. Print the enclosure:
-  * Use 0.2mm layer height.
-  * Use any filament you want. PLA is easiest.
-  * Do not use supports.
-  * Orient the parts such that the case is upside down, the backplate prints with the flat part facing down, and the stand as-is.
+    * Use 0.2mm layer height.
+    * Use any filament you want. PLA is easiest.
+    * Do not use supports.
+    * Orient the parts such that the case is upside down, the backplate prints with the flat part facing down, and the stand as-is.
 3. Format the microSD card in your computer as FAT32 for cards up to and including 32 GB, or exFAT for cards larger than 32 GB (instructions for [macOS](https://support-en.sandisk.com/app/answers/detailweb/a_id/35101/~/steps-to-format-a-memory-card-on-macos), [Windows](https://support-en.sandisk.com/app/answers/detailweb/a_id/9063/~/instructions-to-format-a-memory-card-on-windows)). This will delete all the data on the card!
 3. Assemble the enclosure:
-  1. If installed, peel off the protective plastic cover on the PyPortal Titano's screen.
-  2. Insert the microSD card into the board until it clicks into place.
-  3. Place the board into the enclosure with the screen facing the opening and the USB C port and microSD card slot facing their respective locations.
-  4. Use 4× screws to secure the board into the enclosure's standoffs. Do not tighten the screws any further than necessary to keep the board in place.
-  5. Screw the backplate into place with the other 4× screws. Orient the backplate so the hole labeled "reset" aligns with the reset button on the board. Again, only tighten the screws as much as necessary.
-  6. Install the stand by pressing one side of it into the mounting point on the backplate, then gently squeezing the stand into place and pressing the other side into its mounting point.
-  7. If you want to use the ambient light sensor, shove a little piece of 1.75mm transparent filament (any material) into the hole near the microSD card until it's flush with the outside of the case. If you don't care about having the screen adjust its brightness automatically, or you odn't have any transparent filament, you can skip this.
+    1. If installed, peel off the protective plastic cover on the PyPortal Titano's screen.
+    2. Insert the microSD card into the board until it clicks into place.
+    3. Place the board into the enclosure with the screen facing the opening and the USB C port and microSD card slot facing their respective locations.
+    4. Use 4× screws to secure the board into the enclosure's standoffs. Do not tighten the screws any further than necessary to keep the board in place.
+    5. Screw the backplate into place with the other 4× screws. Orient the backplate so the hole labeled "reset" aligns with the reset button on the board. Again, only tighten the screws as much as necessary.
+    6. Install the stand by pressing one side of it into the mounting point on the backplate, then gently squeezing the stand into place and pressing the other side into its mounting point.
+    7. If you want to use the ambient light sensor, shove a little piece of 1.75mm transparent filament (any material) into the hole near the microSD card until it's flush with the outside of the case. If you don't care about having the screen adjust its brightness automatically, or you odn't have any transparent filament, you can skip this.
 4. Install the software for the picture frame:
-  1. Clone this Git repository, or download it as a `.zip` and extract it.
-  2. Copy `client/settings.toml.example` to `settings.toml` and open it in a text editor.
-  3. At a minimum, look at the section "Settings you'll have to change" and change those values. There are more settings you can change if you want, but it's not necessary.
-  4. Copy everything in the `client` directory, but not the `client` directory itself, to the `CIRCUITPY` drive. It might take a while. Eventually the board should reboot, connect to Wi-Fi, and start showing your pictures!
+    1. Clone this Git repository, or download it as a `.zip` and extract it.
+    2. Copy `client/settings.toml.example` to `settings.toml` and open it in a text editor.
+    3. At a minimum, look at the section "Settings you'll have to change" and change those values. There are more settings you can change if you want, but it's not necessary.
+    4. Copy everything in the `client` directory, but not the `client` directory itself, to the `CIRCUITPY` drive. It might take a while. Eventually the board should reboot, connect to Wi-Fi, and start showing your pictures!
 
 
 ## Usage
@@ -79,10 +79,10 @@ The overall workflow of the picture frame is:
 
 1. PyPortal starts up, mounts its SD card to `/sd`, initializes its external ESP32 for Wi-Fi, and connects.
 2. At startup, and then every hour by default, it:
-  1. Connects to the Flask server and does a `GET` for `/assets`. This endpoint returns a JSON map of favorited applicable asset UUIDs in Immich to MD5 hashes of their checksums. In Immich, this is the `/api/search/metadata` endpoint, which also supports pagination.
-  2. A list of all assets on the SD card are indexed. If a UUID is found on the SD card that isn't in the JSON map from the server, or if the UUID does exist but the hash differs, that asset on the SD card is deleted.
-  3. A list of assets to download is assembled: this is every UUID in the JSON map that's not on the SD card or ones with differing MD5 hashes.
-  4. Each asset (if any) is downloaded as a `.bmp` from the `/asset/<uuid>` endpoint in the Flask server. Before each individual download, disk space is freed if necessary. More specifically, the asset is downloaded by the Flask server's `/asset/<uuid>` endpoint which in turn gets it from Immich's `/api/assets/<uuid>/thumbnail` endpoint, resized to 480x320 with letterboxing/pillarboxing added as necessary to ensure the image is exactly that size, then streamed back as an uncompressed 24-bit `image/bmp`.
+    1. Connects to the Flask server and does a `GET` for `/assets`. This endpoint returns a JSON map of favorited applicable asset UUIDs in Immich to MD5 hashes of their checksums. In Immich, this is the `/api/search/metadata` endpoint, which also supports pagination.
+    2. A list of all assets on the SD card are indexed. If a UUID is found on the SD card that isn't in the JSON map from the server, or if the UUID does exist but the hash differs, that asset on the SD card is deleted.
+    3. A list of assets to download is assembled: this is every UUID in the JSON map that's not on the SD card or ones with differing MD5 hashes.
+    4. Each asset (if any) is downloaded as a `.bmp` from the `/asset/<uuid>` endpoint in the Flask server. Before each individual download, disk space is freed if necessary. More specifically, the asset is downloaded by the Flask server's `/asset/<uuid>` endpoint which in turn gets it from Immich's `/api/assets/<uuid>/thumbnail` endpoint, resized to 480x320 with letterboxing/pillarboxing added as necessary to ensure the image is exactly that size, then streamed back as an uncompressed 24-bit `image/bmp`.
 
 Assets are stored in `/sd/<uuid>/<md5>.bmp`. Bitmaps are used instead of JPEGs because `displayio.OnDiskBitmap` is needed to directly stream the bitmap data from the SD card to the screen. The JPEGs are too big to decode and buffer into the tiny amount of memory available. This is also one of the key reasons the Flask server exists: the images in Immich are way, way too big to manipulate directly on the board, but trivial for Python's Pillow library to do so on a real server.
 
