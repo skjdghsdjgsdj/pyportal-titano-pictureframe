@@ -534,10 +534,16 @@ class App:
 
 		if self.esp is None:
 			self.ui.set_status("Initializing Wi-Fi hardware...").render()
-			self.esp, requests = self._get_esp32()
+
+			while True:
+				try:
+					self.esp, requests = self._get_esp32()
+					break
+				except Exception as e:
+					print(f"Failed to init ESP32, retrying: {e}")
 
 			mac_id = ':'.join('%02X' % byte for byte in self.esp.MAC_address)
-			print(f"ESP32 found; firmware version {self.esp.firmware_version}, MAC ID {mac_id}")
+			print(f"ESP32 init'ed: firmware {self.esp.firmware_version}, MAC ID {mac_id}")
 		else:
 			requests = self.requests
 
