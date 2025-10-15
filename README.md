@@ -22,6 +22,8 @@ For hardware, you'll need this stuff. Yay, no soldering or wiring at all!
 * 8× M3x4 screws
 * A computer with a USB C port and a microSD card reader, or an SD card reader with a microSD-to-SD adapter (many cards come with this)
 
+You might want a USB C cable with a right angle connector, but it's not necessary.
+
 You also need:
 
 * [Immich](https://immich.app/) up and running somewhere
