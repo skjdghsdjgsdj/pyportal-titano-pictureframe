@@ -96,11 +96,11 @@ def get_image(immichUUID: str):
 	resized = ImageOps.pad(image, (os.getenv("IMAGE_WIDTH", 480), os.getenv("IMAGE_HEIGHT", 320)))
 
 	buffer = io.BytesIO()
-	resized.save(buffer, format="JPEG", quality=90)
+	resized.save(buffer, format="BMP")
 	buffer.seek(0)
 
 	response = make_response(buffer)
-	response.headers["Content-Type"] = "image/jpeg"
+	response.headers["Content-Type"] = "image/bmp"
 
 	return response
 

@@ -1,5 +1,7 @@
 import os
+import random
 import re
+import time
 
 try:
 	# noinspection PyUnusedImports
@@ -26,6 +28,8 @@ class UI:
 	def __init__(self, display):
 		self.display = display
 		self.display.auto_refresh = False
+
+		self.image: displayio.TileGrid | None = None
 
 		self._init_components()
 
@@ -54,6 +58,20 @@ class UI:
 		self.root_group.append(self.status_label_shadow)
 		self.root_group.append(self.status_label)
 
+	def show_image(self, path: str | None):
+		if self.image is not None:
+			self.root_group.remove(self.image)
+
+		if path is not None:
+			print(f"Showing image: {path}")
+
+			bitmap = displayio.OnDiskBitmap(open(path, "rb"))
+			self.image = displayio.TileGrid(bitmap, pixel_shader = bitmap.pixel_shader)
+
+			self.root_group.insert(0, self.image)
+
+		return self
+
 	def set_status(self, status: str | None):
 		if status is None:
 			self.status_label.hidden = True
@@ -76,65 +94,137 @@ class App:
 		self.asset_path: Final[str] = asset_path
 
 		self.requests: adafruit_requests.Session | None = None
-		self.spi = None
-		self.sd = None
 
 	def start(self):
 		self._mount_sd()
 		self._connect()
 		self._sync()
+		self._loop()
 
-	def _walk_fs_assets(self) -> Iterable[tuple[str, str]]:
+	def _loop(self):
+		self.ui.set_status(None).render()
+
+		last_image_path = None
+		last_sync = time.monotonic()
+		while True:
+			now = time.monotonic()
+			if now - last_sync > os.getenv("SYNC_INTERVAL_SECONDS", 3600):
+				last_sync = now
+				self._sync()
+
+			path = self._get_random_sd_asset_path()
+			if path is None:
+				self.ui.show_image(None)
+				self.ui.set_status("No images available").render()
+			elif last_image_path != path:
+				last_image_path = path
+				self.ui.set_status(None).show_image(path).render()
+
+			time.sleep(15)
+
+	@staticmethod
+	def _is_uuid(string: str) -> bool:
+		# The ACTUAL pattern should be:
+		# ^[a-f0-9]{8}-?[a-f0-9]{4}-?4[a-f0-9]{3}-?[89ab][a-f0-9]{3}-?[a-f0-9]{12}$
+		# ...but the CircuitPython re engine doesn't support the brace syntax, so have to count group sizes manually.
+		match = re.match(r"^([a-f0-9]+)-?([a-f0-9]+)-?(4[a-f0-9]+)-?([89ab][a-f0-9]+)-?([a-f0-9]+)$", string)
+		if not match:
+			return False
+
+		group_sizes = [8, 4, 4, 4, 12]
+		for i, size in enumerate(group_sizes):
+			if len(match.group(i + 1)) != size:
+				return False
+
+		return True
+
+	@staticmethod
+	def _is_dir(path: str) -> bool:
+		try:
+			stat = os.stat(path)
+			return stat[0] & 0x4000
+		except OSError:
+			return False
+
+	def _get_random_sd_asset_path(self) -> str | None:
+		all_assets = list(self._walk_fs_assets())
+		if not all_assets:
+			return None
+
+		uuid, md5 = random.choice(all_assets)
+		return self._build_asset_path(uuid, md5)
+
+	def _walk_fs_assets(self, delete_orphans: bool = False) -> Iterable[tuple[str, str]]:
 		for asset_dir in os.listdir(self.asset_path):
-			# FIXME this match isn't great but CircuitPython doesn't support "counted repetitions" (braces)
-			if not re.match(r"^[a-f0-9]+-?[a-f0-9]+-?4[a-f0-9]+-?[89ab][a-f0-9]+-?[a-f0-9]+$", asset_dir):
-				print(f"Ignoring {asset_dir} because it's not a UUID")
+			full_asset_dir = self.asset_path + "/" + asset_dir
+
+			if not self._is_uuid(asset_dir):
+				print(f"Ignoring {full_asset_dir} because it's not a UUID")
 				continue
 
-			full_asset_dir = self.asset_path + "/" + asset_dir
-			stat = os.stat(full_asset_dir)
-			if not (stat[0] & 0x4000):
+			if not self._is_dir(full_asset_dir):
 				print(f"Ignoring {full_asset_dir} because it's not a directory")
+				if delete_orphans:
+					print(f"Deleting {full_asset_dir}")
+					os.unlink(full_asset_dir)
 
 			for asset_file in os.listdir(full_asset_dir):
 				full_asset_path = full_asset_dir + "/" + asset_file
 
-				match = re.match("^([a-f0-9]+)\.jpg$", asset_file)
-				if not match:
-					print(f"Ignoring {full_asset_path} because it doesn't match filename format (regex)")
-					continue
-
-				md5 = match.group(1)
-				if len(md5) != 32:
-					print(f"Ignoring {full_asset_path} because it doesn't match filename format (char count)")
+				# pattern should be {32}, not +, but CircuitPython re doesn't support braces
+				match = re.match("^([a-f0-9]+)\.bmp$", asset_file)
+				md5 = None if not match or len(match.group(1)) != 32 else match.group(1)
+				if not md5:
+					print(f"Ignoring {full_asset_path} because it doesn't match filename format")
+					if delete_orphans:
+						print(f"Deleting {full_asset_path}")
+						os.unlink(full_asset_path)
 					continue
 
 				yield asset_dir, md5
 
 	def _build_asset_path(self, uuid: str, md5: str) -> str:
-		return f"{self.asset_path}/{uuid}/{md5}.jpg"
+		return f"{self.asset_path}/{uuid}/{md5}.bmp"
+
+	def _download_asset(self, md5: str, uuid: str) -> None:
+		url = os.getenv("ENDPOINT_URL") + "/image/" + uuid
+		print(f"Downloading {url}...", end = "")
+		response = self.requests.get(
+			url = url,
+			stream = True
+		)
+
+		if response.status_code != 200:
+			raise RuntimeError(f"Got HTTP {response.status_code} when downloading {url}")
+
+		total_bytes = 0
+		filename = self._build_asset_path(uuid, md5)
+		self._mkdir_if_needed(self.asset_path + "/" + uuid)
+		with open(filename, "wb") as f:
+			for chunk in response.iter_content(1024):
+				# noinspection PyTypeChecker
+				total_bytes += f.write(chunk)
+
+			print(f"done ({total_bytes} bytes)")
 
 	def _sync(self):
 		self.ui.set_status("Syncing images...").render()
 
 		# ask the server for all available assets, even if they're already stored on the SD card
-		response = self.requests.get(os.getenv("ENDPOINT_URL") + "/assets")
+		url = os.getenv("ENDPOINT_URL") + "/assets"
+		response = self.requests.get(url)
 		if response.status_code != 200:
-			print(f"Got HTTP {response.status_code} when syncing assets")
-			return
+			raise RuntimeError(f"Got HTTP {response.status_code} when syncing assets from {url}")
 
 		assets_on_server: dict[str, str] = response.json()
 
-		# first build an index of what's on the SD card
+		# first build an index of what's on the SD card, and delete ones that aren't on the server anymore
 		assets_on_sd_card = {}
-		for uuid_on_sd_card, md5_on_sd_card in self._walk_fs_assets():
-			assets_on_sd_card[uuid_on_sd_card] = md5_on_sd_card
-
-		print("On server:")
-		print(assets_on_server)
-
-		print("On SD card:")
-		print(assets_on_sd_card)
+		for uuid_on_sd_card, md5_on_sd_card in self._walk_fs_assets(delete_orphans = os.getenv("DELETE_ORPHANS", False)):
+			if uuid_on_sd_card not in assets_on_server or assets_on_server[uuid_on_sd_card] != md5_on_sd_card:
+				self._delete_asset(uuid = uuid_on_sd_card, md5 = md5_on_sd_card)
+			else:
+				assets_on_sd_card[uuid_on_sd_card] = md5_on_sd_card
 
 		# then build a list of what needs downloading (new UUID or same UUID with new MD5)
 		assets_to_download: dict[str, str] = {}
@@ -145,6 +235,7 @@ class App:
 					continue
 				else: # same UUID, different hash, so delete the old one too
 					os.unlink(self._build_asset_path(uuid_on_server, md5_on_sd_card))
+					os.sync()
 
 			assets_to_download[uuid_on_server] = md5_on_server
 
@@ -152,33 +243,11 @@ class App:
 		i = 0
 		for uuid, md5 in assets_to_download.items():
 			self.ui.set_status(f"Syncing images ({i + 1}/{len(assets_to_download)})").render()
-
-			url = os.getenv("ENDPOINT_URL") + "/image/" + uuid
-			print(f"Downloading {url}")
-			response = self.requests.get(
-				url = url,
-				stream = True
-			)
-
-			if response.status_code != 200:
-				raise RuntimeError(f"Got HTTP {response.status_code} when downloading {url}")
-
-			# free up space if needed before downloading
-			self._free_up_space(assets_on_server)
-
-			total_bytes = 0
-			filename = self._build_asset_path(uuid, md5)
-			self._mkdir_if_needed(self.asset_path + "/" + uuid)
-			with open(filename, "wb") as f:
-				for chunk in response.iter_content(1024):
-					# noinspection PyTypeChecker
-					total_bytes += f.write(chunk)
-
-				print(f"Downloaded {filename} ({total_bytes} bytes)")
-
+			self._free_up_space(assets_on_server) # if it'll be needed
+			self._download_asset(md5, uuid)
 			i += 1
 
-	def _delete_asset(self, min_free_bytes: int, uuid: str, md5: str, available_assets: dict[str, str] | None = None) -> tuple[bool, bool | None]:
+	def _delete_asset(self, uuid: str, md5: str, min_free_bytes: int | None = None, available_assets: dict[str, str] | None = None) -> tuple[bool, bool | None]:
 		if available_assets is not None and (uuid in available_assets or available_assets[uuid] == md5):
 			return False, None # skip this one; it's still in the rotation and this is the first pass
 
@@ -186,9 +255,12 @@ class App:
 		os.unlink(delete_path)
 		os.sync()
 
-		free_bytes = self._get_free_bytes()
-		print(f"Deleted {delete_path}; need {min_free_bytes} bytes free, {free_bytes} now free")
-		return True, free_bytes >= min_free_bytes
+		if min_free_bytes is None:
+			return True, None
+		else:
+			free_bytes = self._get_free_bytes()
+			print(f"Deleted {delete_path}; need {min_free_bytes} bytes free, {free_bytes} now free")
+			return True, free_bytes >= min_free_bytes
 
 	def _free_up_space(self, available_assets: dict[str, str]):
 		min_free_bytes = int(os.getenv("MIN_FREE_BYTES", 1048576))
@@ -225,15 +297,15 @@ class App:
 		raise RuntimeError(f"Need {min_free_bytes} free bytes but couldn't find anything else to delete")
 
 	def _get_free_bytes(self):
-		# this mess: https://docs.circuitpython.org/en/latest/shared-bindings/os/#os.statvfs
-		f_bsize, f_frsize, f_blocks, f_bfree, f_bavail, f_files, f_ffree, f_favail, f_flag, f_namemax = os.statvfs(self.asset_path)
-		return f_frsize * f_bfree
+		# Indices for the tuple: https://docs.circuitpython.org/en/latest/shared-bindings/os/#os.statvfs
+		statvfs = os.statvfs(self.asset_path)
+		return statvfs[1] * statvfs[3]
 
 	def _connect(self):
 		wifi_ssid = os.getenv("CIRCUITPY_WIFI_SSID")
 		wifi_password = os.getenv("CIRCUITPY_WIFI_PASSWORD")
 
-		self.ui.set_status("Starting...").render()
+		self.ui.set_status("Initializing Wi-Fi...").render()
 
 		esp, requests = self._get_esp32()
 
@@ -267,27 +339,24 @@ class App:
 				raise RuntimeError(f"Path {path} exists but isn't a directory")
 		except OSError:
 			os.mkdir(path)
+			os.sync()
 
-	def _mount_sd(self):
-		if self.sd is not None:
-			return self.sd
-
+	def _mount_sd(self) -> None:
 		self.ui.set_status("Mounting SD...").render()
 
 		spi = board.SPI()
 		cs = digitalio.DigitalInOut(board.SD_CS)
 
-		self.sd = adafruit_sdcard.SDCard(spi, cs)
+		sd = adafruit_sdcard.SDCard(spi, cs)
 		# noinspection PyTypeChecker
-		vfs = storage.VfsFat(self.sd)
+		vfs = storage.VfsFat(sd)
 		storage.mount(vfs, "/sd")
 
 		# create the asset directory if needed
 		self._mkdir_if_needed(self.asset_path)
 
-		return self.sd
-
-	def _get_esp32(self) -> tuple[ESP_SPIcontrol, adafruit_requests.Session]:
+	@staticmethod
+	def _get_esp32() -> tuple[ESP_SPIcontrol, adafruit_requests.Session]:
 		esp32_cs = DigitalInOut(board.ESP_CS)
 		esp32_ready = DigitalInOut(board.ESP_BUSY)
 		esp32_reset = DigitalInOut(board.ESP_RESET)
@@ -306,6 +375,3 @@ class App:
 
 app = App()
 app.start()
-
-while True:
-	pass

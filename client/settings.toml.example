@@ -8,3 +8,7 @@ ENDPOINT_URL="http://1.2.3.4:5000"
 # than this much space exists, unused downloaded assets are deleted in an undefined order until enough space does exist.
 # Set to 0 to disable free space checks, but not a good idea.
 MIN_FREE_BYTES=1048576
+# If set to true (1), then files not matching the expected naming format on the SD card are deleted. This is useful for
+# debugging or if reusing an SD card and you don't care what's already on it. Set to false (0, the default) to just skip
+# unrecognized files.
+DELETE_ORPHANS=0
