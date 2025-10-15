@@ -2,6 +2,8 @@
 
 Use a [PyPortal Titano](https://www.adafruit.com/product/4444) as a little picture frame with images pulled from your favorites in [Immich](https://immich.app/).
 
+![The PyPortal Titano picture frame in action](hero.jpg)
+
 The project is structured into three main parts:
 
 * `client`: the CircuitPython code that runs on the PyPortal Titano
