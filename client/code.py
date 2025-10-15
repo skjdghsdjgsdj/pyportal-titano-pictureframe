@@ -3,6 +3,7 @@ import random
 import re
 import time
 
+# CircuitPython doesn't have the typing library, so this is for the IDE's sake and gets ignored on the board
 try:
 	# noinspection PyUnusedImports
 	from typing import Iterable, Any, List, Final
@@ -22,10 +23,18 @@ from adafruit_esp32spi.adafruit_esp32spi import ESP_SPIcontrol
 from digitalio import DigitalInOut
 import adafruit_sdcard
 
-root = displayio.Group()
-
 class UI:
+	"""
+	The UI.
+	"""
+
 	def __init__(self, display):
+		"""
+		Sets up the UI.
+
+		:param display: Board's display, which is probably board.DISPLAY
+		"""
+
 		self.display = display
 		self.display.auto_refresh = False
 
@@ -35,7 +44,11 @@ class UI:
 
 		display.root_group = self.root_group
 
-	def _init_components(self):
+	def _init_components(self) -> None:
+		"""
+		Sets up all the UI components in their default states.
+		"""
+
 		self.root_group = displayio.Group()
 		self.font = bitmap_font.load_font("/bdf/sf-compact-display.bdf")
 
@@ -59,6 +72,13 @@ class UI:
 		self.root_group.append(self.status_label)
 
 	def show_image(self, path: str | None):
+		"""
+		Shows a slideshow image or placeholder text if one isn't provided.
+
+		:param path: Path to the image to show, or None to show placeholder text
+		:return: self
+		"""
+
 		if self.image is not None:
 			self.root_group.remove(self.image)
 
@@ -73,6 +93,13 @@ class UI:
 		return self
 
 	def set_status(self, status: str | None):
+		"""
+		Sets the text of the status label at the bottom-left of the screen or hides it if None.
+
+		:param status: Status text to show or hides label if None
+		:return: self
+		"""
+
 		if status is None:
 			self.status_label.hidden = True
 			self.status_label_shadow.hidden = True
@@ -89,19 +116,37 @@ class UI:
 		self.display.refresh()
 
 class App:
+	"""
+	The main app flow.
+	"""
+
 	def __init__(self, asset_path: str = "/sd/assets"):
+		"""
+		Sets up the main app.
+
+		:param asset_path: Path to where assets are stored on the SD card
+		"""
+
 		self.ui = UI(board.DISPLAY)
 		self.asset_path: Final[str] = asset_path
 
 		self.requests: adafruit_requests.Session | None = None
 
-	def start(self):
+	def start(self) -> None:
+		"""
+		Entry point for the app; loops forever.
+		"""
+
 		self._mount_sd()
 		self._connect()
 		self._sync()
 		self._loop()
 
-	def _loop(self):
+	def _loop(self) -> None:
+		"""
+		Main loop that runs once all the hardware is setup and initial sync completed. Loops forever.
+		"""
+
 		self.ui.set_status(None).render()
 
 		last_image_path = None
@@ -124,6 +169,12 @@ class App:
 
 	@staticmethod
 	def _is_uuid(string: str) -> bool:
+		"""
+		Validates that the given string is a valid lowercase UUID.
+		:param string: Candidate string to validate
+		:return: True if the string is a valid UUID, False otherwise
+		"""
+
 		# The ACTUAL pattern should be:
 		# ^[a-f0-9]{8}-?[a-f0-9]{4}-?4[a-f0-9]{3}-?[89ab][a-f0-9]{3}-?[a-f0-9]{12}$
 		# ...but the CircuitPython re engine doesn't support the brace syntax, so have to count group sizes manually.
@@ -140,6 +191,14 @@ class App:
 
 	@staticmethod
 	def _is_dir(path: str) -> bool:
+		"""
+		Checks if the given path is a directory. IOErrors are (unfortunately) assumed to indicate a file doesn't exist
+		due to CircuitPython limitations.
+
+		:param path: Path to test
+		:return: True if the given path is a directory, False otherwise (like a file, doesn't exist at all, etc.)
+		"""
+
 		try:
 			stat = os.stat(path)
 			return stat[0] & 0x4000
@@ -147,6 +206,13 @@ class App:
 			return False
 
 	def _get_random_sd_asset_path(self, avoid: str | None = None) -> str | None:
+		"""
+		Gets a random asset from the SD card or None if there aren't any available.
+
+		:param avoid: Try not to pick this asset; no effect if fewer than two assets are available.
+		:return: A random asset path or None if there aren't any available.
+		"""
+
 		all_assets = list(self._walk_fs_assets())
 		if not all_assets:
 			return None
@@ -161,6 +227,14 @@ class App:
 		return path
 
 	def _walk_fs_assets(self, delete_orphans: bool = False) -> Iterable[tuple[str, str]]:
+		"""
+		Iterates all the assets on the SD card, optionally deleting orphans found on the way.
+
+		:param delete_orphans: True to delete files that were found that don't match the asset naming pattern, or false
+		to just ignore them.
+		:return: Tuple of asset UUIDs and their MD5 hashes
+		"""
+
 		for asset_dir in os.listdir(self.asset_path):
 			full_asset_dir = self.asset_path + "/" + asset_dir
 
@@ -190,9 +264,25 @@ class App:
 				yield asset_dir, md5
 
 	def _build_asset_path(self, uuid: str, md5: str) -> str:
+		"""
+		Builds a path to the asset for the given UUID and MD5 hash. This doesn't necessarily mean the asset actually
+		exists.
+
+		:param uuid: Asset's UUID
+		:param md5: Asset's MD5 hash
+		:return: Path to the asset on the SD card
+		"""
+
 		return f"{self.asset_path}/{uuid}/{md5}.bmp"
 
-	def _download_asset(self, md5: str, uuid: str) -> None:
+	def _download_asset(self, uuid: str, md5: str) -> None:
+		"""
+		Downloads the .bmp for the asset with the given UUID and MD5 hash.
+
+		:param uuid: Asset's UUID
+		:param md5: Asset's MD5 hash
+		"""
+
 		url = os.getenv("ENDPOINT_URL") + "/image/" + uuid
 		print(f"Downloading {url}...", end = "")
 		response = self.requests.get(
@@ -213,7 +303,17 @@ class App:
 
 			print(f"done ({total_bytes} bytes)")
 
-	def _sync(self):
+	def _sync(self) -> None:
+		"""
+		Syncs assets from the server to the SD card. Along with relevant UI updates, this will:
+
+		1. Ask the server for all available assets (UUIDs and their MD5s)
+		2. Enumerate what's actually on the SD card, deleting orphans if that setting is turned on, and deleting found
+		   assets that are no longer on the server or that mismatch hashes.
+		3. Finding out what assets need downloading (SD card lacks the UUID or the existing UUID has a different hash)
+		4. Downloads each asset to the SD card, freeing up space if needed along the way
+		"""
+
 		self.ui.set_status("Syncing images...").render()
 
 		# ask the server for all available assets, even if they're already stored on the SD card
@@ -250,25 +350,45 @@ class App:
 		for uuid, md5 in assets_to_download.items():
 			self.ui.set_status(f"Syncing images ({i + 1}/{len(assets_to_download)})").render()
 			self._free_up_space(assets_on_server) # if it'll be needed
-			self._download_asset(md5, uuid)
+			self._download_asset(uuid, md5)
 			i += 1
 
 	def _delete_asset(self, uuid: str, md5: str, min_free_bytes: int | None = None, available_assets: dict[str, str] | None = None) -> tuple[bool, bool | None]:
-		if available_assets is not None and (uuid in available_assets or available_assets[uuid] == md5):
+		"""
+		Deletes an asset from the SD card.
+
+		:param uuid: Asset's UUID
+		:param md5: Asset's MD5 hash
+		:param min_free_bytes: Check and report on free space available on the SD card, or ignored if 0 or None
+		:param available_assets: If not None, and the existing asset on the SD card matches this UUID and MD5 hash,
+		skips the deletion.
+		:return: Tuple of whether this asset was actually deleted or not, and whether or not there's now enough free
+		space on the SD card if min_free_bytes is not None and > 0, or None if no free space check was run
+		"""
+
+		if available_assets is not None and (uuid in available_assets and available_assets[uuid] == md5):
 			return False, None # skip this one; it's still in the rotation and this is the first pass
 
 		delete_path = self._build_asset_path(uuid, md5)
 		os.unlink(delete_path)
 		os.sync()
 
-		if min_free_bytes is None:
+		if min_free_bytes is None or min_free_bytes <= 0:
 			return True, None
 		else:
 			free_bytes = self._get_free_bytes()
 			print(f"Deleted {delete_path}; need {min_free_bytes} bytes free, {free_bytes} now free")
 			return True, free_bytes >= min_free_bytes
 
-	def _free_up_space(self, available_assets: dict[str, str]):
+	def _free_up_space(self, available_assets: dict[str, str]) -> None:
+		"""
+		Deletes files repeatedly on the SD card until there's enough free space available as defined in the environment
+		variable MIN_FREE_BYTES. The order of deletion is undefined. Orphaned assets are deleted first, and there's
+		still not enough free space, then in-use assets are deleted too.
+
+		:param available_assets: Avoid deleting these assets first (UUIDs and their MD5 hashes)
+		"""
+
 		min_free_bytes = int(os.getenv("MIN_FREE_BYTES", 1048576))
 		if min_free_bytes <= 0:
 			return # free space cleanup is disabled
@@ -302,12 +422,23 @@ class App:
 
 		raise RuntimeError(f"Need {min_free_bytes} free bytes but couldn't find anything else to delete")
 
-	def _get_free_bytes(self):
+	def _get_free_bytes(self) -> int:
+		"""
+		Gets the amount of free space on the SD card in bytes.
+		:return: Amount of free space on the SD card in bytes
+		"""
+
 		# Indices for the tuple: https://docs.circuitpython.org/en/latest/shared-bindings/os/#os.statvfs
 		statvfs = os.statvfs(self.asset_path)
 		return statvfs[1] * statvfs[3]
 
-	def _connect(self):
+	def _connect(self) -> None:
+		"""
+		Connects to Wi-Fi. Requires that the ESP32 is already initialized. The connection is repeatedly attempted until
+		successful, so this loops infinitely on errors like incorrect SSIDs or passwords and only returns once the Wi-Fi
+		connection is established.
+		"""
+
 		wifi_ssid = os.getenv("CIRCUITPY_WIFI_SSID")
 		wifi_password = os.getenv("CIRCUITPY_WIFI_PASSWORD")
 
@@ -339,6 +470,12 @@ class App:
 
 	@staticmethod
 	def _mkdir_if_needed(path: str) -> None:
+		"""
+		Creates a directory at the given path if one doesn't already exist there.
+
+		:param path: Directory to create
+		"""
+
 		try:
 			stat = os.stat(path)
 			if not (stat[0] & 0x4000):
@@ -348,6 +485,10 @@ class App:
 			os.sync()
 
 	def _mount_sd(self) -> None:
+		"""
+		Mounts the SD card to /sd.
+		"""
+
 		self.ui.set_status("Mounting SD...").render()
 
 		spi = board.SPI()
@@ -363,6 +504,12 @@ class App:
 
 	@staticmethod
 	def _get_esp32() -> tuple[ESP_SPIcontrol, adafruit_requests.Session]:
+		"""
+		Gets the ESP32 device and a requests object to be used for making HTTP requests.
+
+		:return: The actual ESP32 device and a requests object to be used for making HTTP requests.
+		"""
+
 		esp32_cs = DigitalInOut(board.ESP_CS)
 		esp32_ready = DigitalInOut(board.ESP_BUSY)
 		esp32_reset = DigitalInOut(board.ESP_RESET)

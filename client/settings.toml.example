@@ -6,7 +6,7 @@ CIRCUITPY_WIFI_SSID="..."
 # Your Wifi network's password
 CIRCUITPY_WIFI_PASSWORD="..."
 
-# URL to the Flask server, including HTTP(S) and port number, without trailing slash
+# URL to the Flask server, including HTTP(S) and port number, without trailing slash. This is NOT the Immich instance!
 ENDPOINT_URL="http://1.2.3.4:5000"
 
 # --- Settings you can customize if you want ---------------------------------------------------------------------------
