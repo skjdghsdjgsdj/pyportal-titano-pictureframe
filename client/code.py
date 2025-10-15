@@ -112,15 +112,15 @@ class App:
 				last_sync = now
 				self._sync()
 
-			path = self._get_random_sd_asset_path()
-			if path is None:
+			path = self._get_random_sd_asset_path(avoid = last_image_path)
+			if path is None: # nothing on the SD card
 				self.ui.show_image(None)
 				self.ui.set_status("No images available").render()
-			elif last_image_path != path:
+			elif last_image_path != path: # show a new image
 				last_image_path = path
 				self.ui.set_status(None).show_image(path).render()
 
-			time.sleep(15)
+			time.sleep(os.getenv("REFRESH_INTERVAL_SECONDS", 300))
 
 	@staticmethod
 	def _is_uuid(string: str) -> bool:
@@ -146,13 +146,19 @@ class App:
 		except OSError:
 			return False
 
-	def _get_random_sd_asset_path(self) -> str | None:
+	def _get_random_sd_asset_path(self, avoid: str | None = None) -> str | None:
 		all_assets = list(self._walk_fs_assets())
 		if not all_assets:
 			return None
 
-		uuid, md5 = random.choice(all_assets)
-		return self._build_asset_path(uuid, md5)
+		path = None
+		# keep picking a random path that differs from the avoid path, unless there's only one file anyway or there's
+		# no need to avoid
+		while path is None or (avoid is not None and len(all_assets) > 1 and path == avoid):
+			uuid, md5 = random.choice(all_assets)
+			path = self._build_asset_path(uuid, md5)
+
+		return path
 
 	def _walk_fs_assets(self, delete_orphans: bool = False) -> Iterable[tuple[str, str]]:
 		for asset_dir in os.listdir(self.asset_path):

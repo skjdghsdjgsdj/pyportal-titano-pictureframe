@@ -1,14 +1,33 @@
+# --- Settings you'll have to change -----------------------------------------------------------------------------------
+
 # Your Wifi network's name
 CIRCUITPY_WIFI_SSID="..."
+
 # Your Wifi network's password
 CIRCUITPY_WIFI_PASSWORD="..."
+
 # URL to the Flask server, including HTTP(S) and port number, without trailing slash
 ENDPOINT_URL="http://1.2.3.4:5000"
-# Ensure at least this much space is free on the SD card when downloading images (default of 1048576 is 1 MB). If less
-# than this much space exists, unused downloaded assets are deleted in an undefined order until enough space does exist.
-# Set to 0 to disable free space checks, but not a good idea.
+
+# --- Settings you can customize if you want ---------------------------------------------------------------------------
+
+# Show a new image each time this number of seconds has elapsed (default of 300 is 5 minutes)
+REFRESH_INTERVAL_SECONDS=300
+
+# Check the server for new, updated, or deleted images every time this number of seconds have elapsed (default of 3600
+# is every hour)
+SYNC_INTERVAL_SECONDS=3600
+
+# -- Don't change these unless you have a specific need to do so -------------------------------------------------------
+
+# Ensure at least this much space is free on the SD card when downloading images (default of 1048576 is 1 MB). Set to 0
+# to disable free space checks, but not recommended. If less than this much space is free, then assets are deleted until
+# enough space is available, but the order of deletion is undefined; it's just however the filesystem chooses to
+# enumerate its contents.
 MIN_FREE_BYTES=1048576
-# If set to true (1), then files not matching the expected naming format on the SD card are deleted. This is useful for
-# debugging or if reusing an SD card and you don't care what's already on it. Set to false (0, the default) to just skip
-# unrecognized files.
+
+# If set to true (1), then files not matching the expected naming format on the SD card are deleted. The default (0)
+# just ignores these files without deleting them. This is useful if you're developing the code and accidentally littered
+# the SD card with files that are misnamed, or if you're using a pre-existing SD card and didn't reformat it. If you
+# started with a freshly formatted SD card, then in practice this setting shouldn't delete anything.
 DELETE_ORPHANS=0
