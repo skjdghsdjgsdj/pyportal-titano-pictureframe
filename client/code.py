@@ -345,15 +345,22 @@ class App:
 		   assets that are no longer on the server or that mismatch hashes.
 		3. Finding out what assets need downloading (SD card lacks the UUID or the existing UUID has a different hash)
 		4. Downloads each asset to the SD card, freeing up space if needed along the way
+
+		If there are server-related problems along the way, like non-200 responses or exceptions, warnings are printed
+		and the sync is skipped (if the JSON couldn't be downloaded) or that specific asset being downloaded is skipped.
 		"""
 
 		self.ui.set_status("Syncing images...").render()
 
 		# ask the server for all available assets, even if they're already stored on the SD card
 		url = os.getenv("ENDPOINT_URL") + "/assets"
-		response = self.requests.get(url)
-		if response.status_code != 200:
-			raise RuntimeError(f"Got HTTP {response.status_code} when syncing assets from {url}")
+		try:
+			response = self.requests.get(url)
+			if response.status_code != 200:
+				raise RuntimeError(f"Got HTTP {response.status_code} when syncing assets from {url}")
+		except Exception as e:
+			print(f"Failed to request assets JSON: {e}")
+			return
 
 		assets_on_server: dict[str, str] = response.json()
 		print(f"Server has {len(assets_on_server)} assets")
@@ -390,8 +397,11 @@ class App:
 
 			self.ui.set_status(f"Syncing images ({i + 1}/{len(assets_to_download)})").render()
 			self._free_up_space(assets_on_server) # if it'll be needed
-			self._download_asset(uuid, md5)
-			i += 1
+			try:
+				self._download_asset(uuid, md5)
+				i += 1
+			except Exception as e:
+				print(f"Failed to download asset with UUID {uuid} and MD5 {md5}: {e}")
 
 		print(f"Downloaded {i + 1 if i == 1 else 'no'} assets, sync done")
 
