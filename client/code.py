@@ -150,11 +150,6 @@ class App:
 		last_image_path = None
 		last_sync = time.monotonic()
 		while True:
-			now = time.monotonic()
-			if now - last_sync > os.getenv("SYNC_INTERVAL_SECONDS", 3600):
-				last_sync = now
-				self._sync()
-
 			path = self._get_random_sd_asset_path(avoid = last_image_path)
 			if path is None: # nothing on the SD card
 				self.ui.show_image(None)
@@ -164,6 +159,11 @@ class App:
 				self.ui.set_status(None).show_image(path).render()
 
 			time.sleep(os.getenv("REFRESH_INTERVAL_SECONDS", 300))
+
+			now = time.monotonic()
+			if now - last_sync > os.getenv("SYNC_INTERVAL_SECONDS", 3600):
+				last_sync = now
+				self._sync()
 
 	@staticmethod
 	def _is_uuid(string: str) -> bool:
