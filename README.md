@@ -109,6 +109,8 @@ So why not a Raspberry Pi? Yes, there are other options out there, and more powe
 
 If you want a much more capable and productive option, I believe there are other projects out there that let you do slideshows of your Immich library on a Raspberry Pi or other spare computer.
 
+If you want to monitor the health of the Flask server, make `GET` requests to `/health-check`. It will respond with an empty body and HTTP 204.
+
 ## Troubleshooting
 
 Before doing anything, [connect to the board's serial console](https://learn.adafruit.com/welcome-to-circuitpython/the-repl) and watch the output. Errors are likely to show up here and be more informative than what the board shows on its screen.
