@@ -147,8 +147,6 @@ class App:
 		Main loop that runs once all the hardware is setup and initial sync completed. Loops forever.
 		"""
 
-		self.ui.set_status(None).render()
-
 		last_image_path = None
 		last_sync = time.monotonic()
 		while True:
@@ -361,6 +359,8 @@ class App:
 			i += 1
 
 		print(f"Downloaded {i + 1 if i == 1 else 'no'} assets, sync done")
+
+		self.ui.set_status(None).render()
 
 	def _delete_asset(self, uuid: str, md5: str, min_free_bytes: int | None = None, available_assets: dict[str, str] | None = None) -> tuple[bool, bool | None]:
 		"""
