@@ -597,10 +597,15 @@ class App:
 		spi = board.SPI()
 		cs = digitalio.DigitalInOut(board.SD_CS)
 
-		sd = adafruit_sdcard.SDCard(spi, cs)
-		# noinspection PyTypeChecker
-		vfs = storage.VfsFat(sd)
-		storage.mount(vfs, "/sd")
+		while True:
+			try:
+				sd = adafruit_sdcard.SDCard(spi, cs)
+				# noinspection PyTypeChecker
+				vfs = storage.VfsFat(sd)
+				storage.mount(vfs, "/sd")
+				break
+			except OSError as e:
+				print(f"Failed to mount SD card, retrying: {e}")
 
 		# create the asset directory if needed
 		self._mkdir_if_needed(self.asset_path)
