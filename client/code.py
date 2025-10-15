@@ -323,6 +323,7 @@ class App:
 			raise RuntimeError(f"Got HTTP {response.status_code} when syncing assets from {url}")
 
 		assets_on_server: dict[str, str] = response.json()
+		print(f"Server has {len(assets_on_server)} assets")
 
 		# first build an index of what's on the SD card, and delete ones that aren't on the server anymore
 		assets_on_sd_card = {}
@@ -331,6 +332,8 @@ class App:
 				self._delete_asset(uuid = uuid_on_sd_card, md5 = md5_on_sd_card)
 			else:
 				assets_on_sd_card[uuid_on_sd_card] = md5_on_sd_card
+
+		print(f"SD card has {len(assets_on_sd_card)} assets")
 
 		# then build a list of what needs downloading (new UUID or same UUID with new MD5)
 		assets_to_download: dict[str, str] = {}
@@ -345,13 +348,19 @@ class App:
 
 			assets_to_download[uuid_on_server] = md5_on_server
 
+		print(f"{len(assets_to_download)} assets to download")
+
 		# download assets that need downloading
 		i = 0
 		for uuid, md5 in assets_to_download.items():
+			print(f"Downloading asset {uuid} ({i + 1} of {len(assets_to_download)})")
+
 			self.ui.set_status(f"Syncing images ({i + 1}/{len(assets_to_download)})").render()
 			self._free_up_space(assets_on_server) # if it'll be needed
 			self._download_asset(uuid, md5)
 			i += 1
+
+		print(f"Downloaded {i + 1 if i == 1 else 'no'} assets, sync done")
 
 	def _delete_asset(self, uuid: str, md5: str, min_free_bytes: int | None = None, available_assets: dict[str, str] | None = None) -> tuple[bool, bool | None]:
 		"""
