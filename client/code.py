@@ -52,6 +52,16 @@ class UI:
 		self.root_group = displayio.Group()
 		self.font = bitmap_font.load_font("/bdf/sf-compact-display.bdf")
 
+		offline_bitmap = displayio.OnDiskBitmap("/img/offline.bmp")
+		self.offline_icon = displayio.TileGrid(
+			offline_bitmap,
+			pixel_shader = offline_bitmap.pixel_shader,
+			x = self.display.width - 35,
+			y = self.display.height - 35
+		)
+		self.offline_icon.hidden = True # just so the UI is less cluttered at first
+		self.root_group.append(self.offline_icon)
+
 		self.status_label = Label(
 			font = self.font,
 			text = "",
@@ -89,6 +99,8 @@ class UI:
 			self.image = displayio.TileGrid(bitmap, pixel_shader = bitmap.pixel_shader)
 
 			self.root_group.insert(0, self.image)
+		else:
+			print("Showing empty image")
 
 		return self
 
@@ -130,6 +142,10 @@ class App:
 		self.ui = UI(board.DISPLAY)
 		self.asset_path: Final[str] = asset_path
 
+		# the underlying ESP32 hardware; should only get initialized once at startup
+		self.esp = None
+
+		# is not None once there's a successful Wi-Fi connection
 		self.requests: adafruit_requests.Session | None = None
 
 	def start(self) -> None:
@@ -138,32 +154,51 @@ class App:
 		"""
 
 		self._mount_sd()
-		self._connect()
-		self._sync()
-		self._loop()
 
-	def _loop(self) -> None:
+		has_assets = False
+		if not any(self._walk_fs_assets()): # if the SD card is empty, then download assets first
+			print("SD card has no assets; attempting to download them before starting slideshow")
+			if self._auto_connect(): # only attempt a sync if online
+				self._sync()
+		else:
+			has_assets = True
+			print("SD card has at least one asset; starting slideshow first")
+
+		self._loop(sync_immediately = has_assets)
+
+	def _loop(self, sync_immediately: bool = False) -> None:
 		"""
 		Main loop that runs once all the hardware is setup and initial sync completed. Loops forever.
+
+		:param: sync_immediately: If True, run a sync immediately after rendering the first image. If false, wait until
+		the usual timeout before running a sync. Only affects the first image render.
 		"""
 
 		last_image_path = None
-		last_sync = time.monotonic()
+		last_sync = None if sync_immediately else time.monotonic()
 		while True:
+			# pick a random asset and show it
 			path = self._get_random_sd_asset_path(avoid = last_image_path)
 			if path is None: # nothing on the SD card
 				self.ui.show_image(None)
 				self.ui.set_status("No images available").render()
 			elif last_image_path != path: # show a new image
 				last_image_path = path
-				self.ui.set_status(None).show_image(path).render()
+				self.ui.set_status(None).render()
+				self.ui.show_image(path).render() # a separate render to get rid of the first before slowly drawing image
+
+			# see if a sync is needed or was forced
+			now = time.monotonic()
+			if last_sync is None or now - last_sync > os.getenv("SYNC_INTERVAL_SECONDS", 3600):
+				last_sync = now
+				print("Sync timeout reached or sync forced")
+				if self._auto_connect():
+					print("Starting sync")
+					self._sync()
+				else:
+					print("Skipping sync, offline")
 
 			time.sleep(os.getenv("REFRESH_INTERVAL_SECONDS", 300))
-
-			now = time.monotonic()
-			if now - last_sync > os.getenv("SYNC_INTERVAL_SECONDS", 3600):
-				last_sync = now
-				self._sync()
 
 	@staticmethod
 	def _is_uuid(string: str) -> bool:
@@ -441,41 +476,76 @@ class App:
 		statvfs = os.statvfs(self.asset_path)
 		return statvfs[1] * statvfs[3]
 
-	def _connect(self) -> None:
+	def _auto_connect(self) -> bool:
 		"""
-		Connects to Wi-Fi. Requires that the ESP32 is already initialized. The connection is repeatedly attempted until
-		successful, so this loops infinitely on errors like incorrect SSIDs or passwords and only returns once the Wi-Fi
-		connection is established.
+		Connects to Wi-Fi. If already connected, does nothing.
+		:return: True if connected, False if not.
+		"""
+
+		if self.requests is None:
+			self._connect()
+
+		was_offline_icon_visible = not self.ui.offline_icon.hidden
+		is_offline_now = self.requests is None
+
+		if is_offline_now != was_offline_icon_visible:
+			print(f"Wi-Fi is now {'disconnected' if is_offline_now else 'connected'}")
+			self.ui.offline_icon.hidden = not is_offline_now
+			self.ui.render()
+
+		return not is_offline_now
+
+	def _connect(self, attempt_timeout: int = 5, total_timeout = 30) -> bool:
+		"""
+		Connects to Wi-Fi. This will:
+
+		* Initialize the ESP32 hardware if not already done so
+		* Repeatedly attempt to connect to Wi-Fi until one of the following happens:
+		  * The connection is successful, in which case True is returned
+		  * Repeated attempts to establish the connection are unsuccessful within the timeout window, in which case
+		    False is returned
+
+		:param attempt_timeout: Maximum timeout for a single connection attempt
+		:param total_timeout: Maximum timeout for the entire series of connection attempts
 		"""
 
 		wifi_ssid = os.getenv("CIRCUITPY_WIFI_SSID")
 		wifi_password = os.getenv("CIRCUITPY_WIFI_PASSWORD")
 
-		self.ui.set_status("Initializing Wi-Fi...").render()
+		self.requests = None
 
-		esp, requests = self._get_esp32()
+		if self.esp is None:
+			self.ui.set_status("Initializing Wi-Fi hardware...").render()
+			self.esp, requests = self._get_esp32()
 
-		mac_id = ':'.join('%02X' % byte for byte in esp.MAC_address)
-		print(f"ESP32 found; firmware version {esp.firmware_version}, MAC ID {mac_id}")
+			mac_id = ':'.join('%02X' % byte for byte in self.esp.MAC_address)
+			print(f"ESP32 found; firmware version {self.esp.firmware_version}, MAC ID {mac_id}")
+		else:
+			requests = self.requests
 
 		attempt_count = 1
-		while not esp.is_connected:
+		start = time.monotonic()
+		while not self.esp.is_connected and time.monotonic() - start < total_timeout:
 			try:
-				status = f"Connecting to {wifi_ssid}..."
+				status = "Connecting to \"" + (wifi_ssid[:18] + "..." if len(wifi_ssid) > 20 else "") + "\""
 				if attempt_count > 1:
 					status += f" (attempt #{attempt_count})"
 
 				self.ui.set_status(status).render()
 
-				esp.connect_AP(wifi_ssid, wifi_password)
+				self.esp.connect_AP(wifi_ssid, wifi_password, attempt_timeout)
+
+				self.requests = requests
+				self.esp._debug = False
+				return True
 			except ConnectionError as e:
 				print(f"Failed to connect to {wifi_ssid}, retrying: {e}")
-				esp._debug = True
+				self.esp._debug = True # be noisy if there are connection errors
 				attempt_count += 1
 
-		esp._debug = False
-
-		self.requests = requests
+		print(f"Wi-Fi connection timed out after {attempt_count} attempts")
+		self.ui.set_status(None).render()
+		return False
 
 	@staticmethod
 	def _mkdir_if_needed(path: str) -> None:
