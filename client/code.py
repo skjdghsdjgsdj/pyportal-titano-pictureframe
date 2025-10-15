@@ -537,7 +537,7 @@ class App:
 		start = time.monotonic()
 		while not self.esp.is_connected and time.monotonic() - start < total_timeout:
 			try:
-				status = "Connecting to \"" + (wifi_ssid[:18] + "..." if len(wifi_ssid) > 20 else "") + "\""
+				status = "Connecting to \"" + (wifi_ssid[:18] + "..." if len(wifi_ssid) > 20 else wifi_ssid) + "\""
 				if attempt_count > 1:
 					status += f" (attempt #{attempt_count})"
 
