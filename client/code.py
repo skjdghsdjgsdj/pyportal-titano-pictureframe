@@ -23,6 +23,14 @@ from adafruit_esp32spi.adafruit_esp32spi import ESP_SPIcontrol
 from digitalio import DigitalInOut
 import adafruit_sdcard
 
+# reset the display rotation in case it was messed with
+board.DISPLAY.rotation = 0
+
+# turn off the speaker to save a token amount of power
+speaker = digitalio.DigitalInOut(board.SPEAKER_ENABLE)
+speaker.switch_to_output(True)
+speaker.value = False
+
 class UI:
 	"""
 	The UI.
