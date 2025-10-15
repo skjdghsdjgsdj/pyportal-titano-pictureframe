@@ -23,6 +23,9 @@ from adafruit_esp32spi.adafruit_esp32spi import ESP_SPIcontrol
 from digitalio import DigitalInOut
 import adafruit_sdcard
 
+# no REPL on the built-in screen
+board.DISPLAY.root_group = None
+
 # reset the display rotation in case it was messed with
 board.DISPLAY.rotation = 0
 
