@@ -18,6 +18,32 @@ REFRESH_INTERVAL_SECONDS=300
 # is every hour)
 SYNC_INTERVAL_SECONDS=3600
 
+# Adjust the screen brightness based on ambient light. This requires that you used a little bit of transparent filament
+# as a light pipe. These numbers can vary drastically based on the actual ambient light, the accuracy of the sensor, the
+# transparency of your filament, the color and thickness of the 3D printed enclosure, and a bunch of other factors, so
+# it's disabled by default.
+#
+# Values you can use are are:
+#   * 0 (the default): disable the sensor and always run the screen at maximum brightness
+#   * Any integer from 1 (the lowest the sensor goes) to 65535 (the highest the sensor goes)
+#
+# The sensor is analog and doesn't correspond to specific lux levels, so you'll have to play with the values until
+# you're satisfied. The sensor is read periodically and averaged, so the screen brightness doesn't update immediately.
+# The brightest value may vary a lot, but 1 probably works nicely as the lower bound.
+#
+# The ultimate screen brightness, if these settings are enabled, is set to 0% at LIGHT_SENSOR_DIMMEST, 100% at
+# LIGHT_SENSOR_BRIGHTEST, and calculated to an intermediate value when between those two points. For example, if the min
+# is 1000, max is 2000, and the sensor reads 1500, then the screen is set to 50%. In the same example, the screen is set
+# to the dimmest brightness if the sensor reads 1000 or below, and the brightest if it reads 2000 or above.
+LIGHT_SENSOR_DIMMEST=0 # The screen is set to the lowest brightness at this sensor reading or below
+LIGHT_SENSOR_BRIGHTEST=0 # The screen is set to the highest brightness at this sensor reading or above
+
+# Sample the light sensor value over this many seconds and average it to find the value. Only has an effect if
+# LIGHT_SENSOR_DIMMEST and LIGHT_SENSOR_BRIGHTNESS are both > 0. Must be less than REFRESH_INTERVAL_SECONDS, and ideally
+# much less. The default of 10 seconds makes for a reasonable sample period without being annoying with frequent
+# backlight updates.
+LIGHT_SENSOR_SAMPLE_SECONDS=10
+
 # -- Don't change these unless you have a specific need to do so -------------------------------------------------------
 
 # Ensure at least this much space is free on the SD card when downloading images (default of 1048576 is 1 MB). Set to 0

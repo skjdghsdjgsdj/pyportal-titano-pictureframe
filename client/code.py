@@ -3,6 +3,8 @@ import random
 import re
 import time
 
+import analogio
+
 # CircuitPython doesn't have the typing library, so this is for the IDE's sake and gets ignored on the board
 try:
 	# noinspection PyUnusedImports
@@ -403,8 +405,6 @@ class App:
 			except Exception as e:
 				print(f"Failed to download asset with UUID {uuid} and MD5 {md5}: {e}")
 
-		print(f"Downloaded {i + 1 if i == 1 else 'no'} assets, sync done")
-
 		self.ui.set_status(None).render()
 
 	def _delete_asset(self, uuid: str, md5: str, min_free_bytes: int | None = None, available_assets: dict[str, str] | None = None) -> tuple[bool, bool | None]:
@@ -614,6 +614,10 @@ class App:
 			raise RuntimeError(f"ESP32 status is {esp.status} but expected {adafruit_esp32spi.WL_IDLE_STATUS} (idle)")
 
 		return esp, requests
+
+pin = analogio.AnalogIn(board.LIGHT)
+while True:
+	print(pin.value)
 
 app = App()
 app.start()
