@@ -75,6 +75,10 @@ It's very easy: favorite a picture in your Immich instance, and eventually it'll
 
 The picture frame syncs itself every hour by default. Only static images will show up, so favorited videos, motion pictures, and other types of assets will be ignored.
 
+The picture frame can work offline, but it's not really meant to. If there's a Wi-Fi connection error, either at startup or when syncing, an icon appears on the screen and the sync is skipped. The next one will attempt to reconnect and the process repeats. In the meantime, assets directly on the SD card are shown in the slideshow.
+
+When powering up the picture frame with assets already on the SD card, the slide show starts immediately and then the sync runs, so you can start the picture frame with at least some picture showing up. If there are no assets on the SD card, like when you first power on the picture frame, a sync is forced and if it fails, a message stating that there are no pictures is shown until the next sync attempt.
+
 ## Background info
 
 The overall workflow of the picture frame is:
