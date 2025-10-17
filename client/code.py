@@ -92,11 +92,15 @@ class UI:
 		self.root_group.append(self.status_label_shadow)
 		self.root_group.append(self.status_label)
 
-	def show_image(self, path: str | None):
+	def show_image(self, path: str | None, buffer_first: bool = False):
 		"""
-		Shows a slideshow image or placeholder text if one isn't provided.
+		Shows a slideshow image or placeholder text if one isn't provided. When showing an existing image, it is
+		buffered to internal storage first if buffer_first is True and rendered from there; otherwise the exact storage
+		path is used.
 
 		:param path: Path to the image to show, or None to show placeholder text
+		:param buffer_first: If true, buffer the image to internal storage first. Note that some boards, the PyPortal
+		Titano included, this is hideously slow and much WORSE than reading directly from the SD card.
 		:return: self
 		"""
 
@@ -105,6 +109,20 @@ class UI:
 
 		if path is not None:
 			print(f"Showing image: {path}")
+
+			if buffer_first:
+				print(f"Buffering image...")
+				bytes_read = 0
+				with open(path, "rb") as input_file:
+					with open("/tmp.bmp", "wb") as output_file:
+						buffer = input_file.read(10240)
+						while buffer:
+							bytes_read += len(buffer)
+							print(f"Copied {bytes_read} bytes")
+							output_file.write(buffer)
+							buffer = input_file.read(10240)
+				print("Done buffering")
+				path = "/tmp.bmp"
 
 			bitmap = displayio.OnDiskBitmap(open(path, "rb"))
 			self.image = displayio.TileGrid(bitmap, pixel_shader = bitmap.pixel_shader)
