@@ -599,6 +599,14 @@ class App:
 		self.ui.set_status("Mounting SD...").render()
 
 		spi = board.SPI()
+		spi.try_lock()
+		original_frequency = spi.frequency
+		requested_frequency = 16000000 # 16 MHz
+		spi.configure(baudrate = requested_frequency)
+		spi.unlock()
+
+		print(f"SPI MHz: original {original_frequency / 1000000}, requested {requested_frequency / 1000000}, actual {spi.frequency / 1000000}")
+
 		cs = digitalio.DigitalInOut(board.SD_CS)
 
 		while True:
