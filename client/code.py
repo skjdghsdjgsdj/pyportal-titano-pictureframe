@@ -435,6 +435,7 @@ class App:
 			return False, None # skip this one; it's still in the rotation and this is the first pass
 
 		delete_path = self._build_asset_path(uuid, md5)
+		print(f"Deleting {delete_path}")
 		os.unlink(delete_path)
 		os.sync()
 
