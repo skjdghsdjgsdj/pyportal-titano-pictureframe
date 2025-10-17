@@ -17,7 +17,7 @@ import digitalio
 import displayio
 import storage
 from adafruit_bitmap_font import bitmap_font
-from adafruit_display_text.label import Label
+from adafruit_display_text.bitmap_label import Label
 from adafruit_esp32spi import adafruit_esp32spi
 from adafruit_esp32spi.adafruit_esp32spi import ESP_SPIcontrol
 from digitalio import DigitalInOut
@@ -76,16 +76,16 @@ class UI:
 		self.status_label = Label(
 			font = self.font,
 			text = "",
-			anchor_point = (0.0, 0.0),
-			anchored_position = (10, self.display.height - 10 - 16),
+			anchor_point = (0.0, 1.0),
+			anchored_position = (10, self.display.height - 20),
 			color = (255, 255, 255),
 		)
 
 		self.status_label_shadow = Label(
 			font = self.font,
 			text = "",
-			anchor_point = (0.0, 0.0),
-			anchored_position = (10 + 1, self.display.height - 10 - 16 + 1),
+			anchor_point = (0.0, 1.0),
+			anchored_position = (10 + 1, self.display.height - 20 + 1),
 			color = (0, 0, 0)
 		)
 
