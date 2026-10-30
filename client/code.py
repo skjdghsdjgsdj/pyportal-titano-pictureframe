@@ -5,7 +5,7 @@ import time
 
 # CircuitPython doesn't have the typing library, so this is for the IDE's sake and gets ignored on the board
 try:
-	# noinspection PyUnusedImports
+	# noinspection PyUnusedImports,PyUnresolvedReferences
 	from typing import Iterable, Any, List, Final
 except ImportError:
 	pass
@@ -522,11 +522,23 @@ class App:
 		:return: True if connected, False if not.
 		"""
 
-		if self.requests is None:
-			self._connect()
+		if not self.esp or not self.esp.is_connected:
+			attempt_count = 0
+			while True:
+				attempt_count += 1
+				try:
+					if not self._connect():
+						raise Exception("Wi-Fi connection failed")
+
+					break
+				except Exception as e:
+					print(f"Got {e} while trying to connect to Wi-Fi on attempt #{attempt_count}")
+					if attempt_count > 5:
+						print(f"Giving up")
+						break
 
 		was_offline_icon_visible = not self.ui.offline_icon.hidden
-		is_offline_now = self.requests is None
+		is_offline_now = not self.esp or not self.esp.is_connected
 
 		if is_offline_now != was_offline_icon_visible:
 			print(f"Wi-Fi is now {'disconnected' if is_offline_now else 'connected'}")
@@ -552,46 +564,42 @@ class App:
 		wifi_ssid = os.getenv("CIRCUITPY_WIFI_SSID")
 		wifi_password = os.getenv("CIRCUITPY_WIFI_PASSWORD")
 
-		self.requests = None
-
 		if self.esp is None:
 			self.ui.set_status("Initializing Wi-Fi hardware...").render()
 
 			while True:
 				try:
-					self.esp, requests = self._get_esp32()
+					self._init_esp32()
 					break
 				except Exception as e:
 					print(f"Failed to init ESP32, retrying: {e}")
 
 			mac_id = ':'.join('%02X' % byte for byte in self.esp.MAC_address)
 			print(f"ESP32 init'ed: firmware {self.esp.firmware_version}, MAC ID {mac_id}")
-		else:
-			requests = self.requests
 
-		attempt_count = 1
 		start = time.monotonic()
-		while not self.esp.is_connected and time.monotonic() - start < total_timeout:
+		while True:
 			try:
 				status = "Connecting to \"" + (wifi_ssid[:18] + "..." if len(wifi_ssid) > 20 else wifi_ssid) + "\""
-				if attempt_count > 1:
-					status += f" (attempt #{attempt_count})"
-
 				self.ui.set_status(status).render()
 
 				self.esp.connect_AP(wifi_ssid, wifi_password, attempt_timeout)
 
-				self.requests = requests
-				self.esp._debug = False
+				if not self.esp.is_connected:
+					print("Wi-Fi connection failed, but no exception raised")
+					continue
+
+				print(f"Connected to {wifi_ssid} after {time.monotonic() - start} seconds")
 				return True
 			except ConnectionError as e:
 				print(f"Failed to connect to {wifi_ssid}, retrying: {e}")
-				self.esp._debug = True # be noisy if there are connection errors
-				attempt_count += 1
+				time.sleep(1)
 
-		print(f"Wi-Fi connection timed out after {attempt_count} attempts")
-		self.ui.set_status(None).render()
-		return False
+			elapsed = time.monotonic() - start
+			if elapsed > total_timeout:
+				print(f"Timeout of {total_timeout} seconds exceeded (spent {elapsed} seconds)")
+				self.ui.set_status(None).render()
+				return False
 
 	@staticmethod
 	def _mkdir_if_needed(path: str) -> None:
@@ -616,20 +624,11 @@ class App:
 
 		self.ui.set_status("Mounting SD...").render()
 
-		spi = board.SPI()
-		spi.try_lock()
-		original_frequency = spi.frequency
-		requested_frequency = 16000000 # 16 MHz
-		spi.configure(baudrate = requested_frequency)
-		spi.unlock()
-
-		print(f"SPI MHz: original {original_frequency / 1000000}, requested {requested_frequency / 1000000}, actual {spi.frequency / 1000000}")
-
 		cs = digitalio.DigitalInOut(board.SD_CS)
 
 		while True:
 			try:
-				sd = adafruit_sdcard.SDCard(spi, cs)
+				sd = adafruit_sdcard.SDCard(board.SPI(), cs)
 				# noinspection PyTypeChecker
 				vfs = storage.VfsFat(sd)
 				storage.mount(vfs, "/sd")
@@ -640,8 +639,7 @@ class App:
 		# create the asset directory if needed
 		self._mkdir_if_needed(self.asset_path)
 
-	@staticmethod
-	def _get_esp32() -> tuple[ESP_SPIcontrol, adafruit_requests.Session]:
+	def _init_esp32(self) -> None:
 		"""
 		Gets the ESP32 device and a requests object to be used for making HTTP requests.
 
@@ -653,16 +651,15 @@ class App:
 		esp32_reset = DigitalInOut(board.ESP_RESET)
 
 		spi = board.SPI()
-		esp = adafruit_esp32spi.ESP_SPIcontrol(spi, esp32_cs, esp32_ready, esp32_reset)
+		self.esp = adafruit_esp32spi.ESP_SPIcontrol(spi, esp32_cs, esp32_ready, esp32_reset)
+		#esp._debug = True
 
-		pool = adafruit_connection_manager.get_radio_socketpool(esp)
-		ssl_context = adafruit_connection_manager.get_radio_ssl_context(esp)
-		requests = adafruit_requests.Session(pool, ssl_context)
+		pool = adafruit_connection_manager.get_radio_socketpool(self.esp)
+		ssl_context = adafruit_connection_manager.get_radio_ssl_context(self.esp)
+		self.requests = adafruit_requests.Session(pool, ssl_context)
 
-		if esp.status == adafruit_esp32spi.WL_IDLE_STATUS:
-			raise RuntimeError(f"ESP32 status is {esp.status} but expected {adafruit_esp32spi.WL_IDLE_STATUS} (idle)")
-
-		return esp, requests
+		if self.esp.status == adafruit_esp32spi.WL_IDLE_STATUS:
+			raise RuntimeError(f"ESP32 status is {self.esp.status} but expected {adafruit_esp32spi.WL_IDLE_STATUS} (idle)")
 
 app = App()
 app.start()
